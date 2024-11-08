@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Undetected Browser</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Arial', sans-serif;
+        }
+        .container {
+            margin-top: 50px;
+        }
+        .btn-success {
+            background-color: #28a745;
+            border: none;
+        }
+        .btn-success:hover {
+            background-color: #218838;
+        }
+
+        h1 {
+            color: #343a40;
+        }
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .result-item span {
+            font-weight: bold;
+        }
+        .result-ip {
+            color: black;
+        }
+        .form-control {
+            height: 150px;
+            resize: none;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+        .btn-primary i {
+            margin-right: 5px;
+        }
+        .btn-danger {
+            margin-left: 10px;
+        }
+        .alert {
+            display: none; /* Initially hidden */
+        }
+        .spinner-border {
+            margin-left: 5px;
+            display: none;
+        }
+        .error-message {
+            color: #dc3545;
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+        .results-section {
+            margin-top: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">Undetected Browser</h1>
+        <div class="card shadow">
+            <div class="card-body">
+                <form id="proxy-form">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label for="proxies">Enter Proxies <small>(Format: host:port:user:pass)</small>:</label>
+                        <textarea class="form-control" id="proxies" name="proxies" rows="5" placeholder="Enter one proxy per line..." ></textarea>
+                        <div id="error-message" class="error-message">Invalid Proxy Format</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">
+                        <i class="fas fa-sync-alt"></i> Run Browsers
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="results-section">
+            <h2 class="mt-4">Results:</h2>
+            <div id="results-container" class="list-group"></div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script>
+        function validateProxies(proxies) {
+            // const proxyPattern = /^(?:(\d{1,3}\.){3}\d{1,3}:\d{1,5}:[\w-]+:[\w-]+)$/;
+            // for (const proxy of proxies) {
+            //     if (!proxyPattern.test(proxy.trim())) {
+            //         return false;
+            //     }
+            // }
+            return true;
+        }
+
+        $(document).ready(function() {
+            $('#proxy-form').on('submit', function(event) {
+                event.preventDefault();  // Prevent default form submission
+                $('#error-message').hide();
+                $('.spinner-border').show();  // Show spinner while processing
+
+                const proxies = $('#proxies').val().trim().split('\n');
+                
+                // Validate proxy format
+                if (!validateProxies(proxies)) {
+                    $('#error-message').text("Invalid Proxy Format. Make sure it's in the right format (host:port:user:pass).").show();
+                    $('.spinner-border').hide();  // Hide spinner if validation fails
+                    return;
+                }
+
+                $.ajax({
+                    url: '{% url "core:index" %}',
+                    method: 'POST',
+                    data: {
+                        'proxies[]': proxies,
+                        'csrfmiddlewaretoken': $('input[name=csrfmiddlewaretoken]').val(),
+                    },
+                    success: function(response) {
+                        // Clear existing results
+                        $('#results-container').empty();
+
+                        // Append new results
+                        $.each(response.results, function(browser, ip) {
+                            const resultItem = `
+                                <div class="list-group-item result-item">
+                                    <span>${browser}</span>
+                                    <span class="result-ip">Info: ${ip}</span>
+                                    <button class="btn btn-danger btn-sm close-browser-btn" data-browser="${browser}">
+                                        <i class="fas fa-times"></i> Close Browser
+                                    </button>
+                                </div>`;
+                            $('#results-container').append(resultItem);
+                        });
+                        $('.spinner-border').hide();  // Hide spinner after success
+                    },
+                    error: function() {
+                        $('#error-message').text("An error occurred while fetching IPs. Please try again later.").show();
+                        $('.spinner-border').hide();  // Hide spinner after error
+                    }
+                });
+            });
+
+            // Event delegation to handle dynamic "Close Browser" buttons
+            $(document).on('click', '.close-browser-btn', function() {
+                const browserName = $(this).data('browser');
+                const button = $(this);
+
+                $.ajax({
+                    url: `/stop_browser/${browserName}/`,
+                    method: 'GET',
+                    success: function() {
+                        // Change the button color and text to indicate success
+                        button.removeClass('btn-danger').addClass('btn-success');
+                        button.html('<i class="fas fa-check"></i> Browser Closed');
+                    },
+                    error: function() {
+                        button.html('<i class="fas fa-exclamation-triangle"></i> Error');
+                    }
+                });
+            });
+        });
+
+        </script>
+</body>
+</html>
